@@ -45,8 +45,8 @@ class SpatioTemporal_Vision_Transformer(nn.Module):
         self.attn_dropout_rate = attn_dropout_rate
         self.conv_patch_representation = conv_patch_representation
 
-        self.num_patches = int((img_dim // patch_dim) ** 2)
-        self.seq_length = self.num_patches + 1
+        self.num_patches = int((img_dim // patch_dim) ** 2) # N number of patches
+        self.seq_length = self.num_patches + 1 # N+1 with the segment class
         self.flatten_dim = patch_dim * patch_dim * num_channels
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embedding_dim))
 
@@ -115,8 +115,8 @@ class SpatioTemporal_Vision_Transformer(nn.Module):
             )
             x = x.view(bs, c, -1, self.patch_dim ** 2)
             x = x.permute(0, 2, 3, 1).contiguous()
-            x = x.view(x.size(0), -1, self.flatten_dim)
-            x = self.linear_encoding(x)
+            x = x.view(x.size(0), -1, self.flatten_dim) # This could be the flattening to 1D
+            x = self.linear_encoding(x)  # Projection into D length latent vector
 
 
         cls_tokens = self.cls_token.expand(x.shape[0], -1, -1)
@@ -155,6 +155,10 @@ def STVT(dataset='SumMe'):
         out_dim = 2
         patch_dim = 1
     elif dataset == 'TVSum':
+        img_dim = 4
+        out_dim = 2
+        patch_dim = 1
+    else:
         img_dim = 4
         out_dim = 2
         patch_dim = 1
