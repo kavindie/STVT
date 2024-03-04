@@ -74,16 +74,14 @@ class Summarize:
                 self.features = torch.asarray(hf['features'][:])
                 self.features = self.features[...,0,0]
         
-        # # Get cluster features
-        # pca_features, closest_points_indices = self.get_cluster_features(self.features)
-        # self.draw_imgs(closest_points_indices, title='img_clusters.png')
+        # Get pca features
         pca = PCA(n_components=args.pca_comps, random_state=42)
         pca.fit(self.features)
         x = pca.transform(self.features)
 
         # generate cps
-        cps, weights, selected, key_labels, pred_summary, _, _ = self.generate_cps(preds, pca_features=x)
-        _, _, _, _, _, keyshots, sorted_keyshots               = self.generate_cps(preds, pca_features=x, use_nbkps=True)
+        cps, weights, selected, key_labels, pred_summary, keyshots, sorted_keyshots = self.generate_cps(preds, pca_features=x)
+
         # Generate video
         self.generate_video(key_labels)
         
@@ -166,7 +164,7 @@ class Summarize:
                 image_features.append(features)
         
         image_features = torch.stack(image_features)
-        self.features = image_features
+        self.features = image_features[..., 0, 0]
 
         # Save the features to an h5 file
         with h5py.File(self.h5_file, 'w') as hf:
@@ -245,7 +243,7 @@ class Summarize:
         plt.savefig(title)
         plt.close()
 
-    def generate_cps(self, preds, pca_features=None, use_nbkps=False):
+    def generate_cps(self, preds, pca_features=None):
 
             vidlen = len(self.features) # this is going to be greater than the preds
             last_pred_val = preds[-1]
@@ -257,38 +255,22 @@ class Summarize:
             else:
                 pred_array = np.asarray(pca_features)
             
-            algo = rpt.KernelCPD(kernel="linear").fit(pred_array)
+            algo = rpt.KernelCPD(kernel="cosine", min_size=15).fit(pred_array)
             penalty = True
 
-            if use_nbkps:
-                result = algo.predict(n_bkps=args.cps_number) # This will always have the last frame by not the first one
+            for _ in range(2):
+                if penalty:
+                    result = algo.predict(pen=1) # This will always have the last frame by not the first one
+                else:
+                    result = algo.predict(n_bkps=args.cps_number) # This will always have the last frame by not the first one   
+                
                 cps = [[result[i-1], result[i]-1] for i in range(1, len(result))]
                 cps.insert(0, [0, result[0]-1])
                 cps = torch.as_tensor(cps)
-            else:
-                for _ in range(2):
-                    if penalty:
-                        result = algo.predict(pen=1) # This will always have the last frame by not the first one
-                    else:
-                        result = algo.predict(n_bkps=args.cps_number) # This will always have the last frame by not the first one   
-                    
-                    cps = [[result[i-1], result[i]-1] for i in range(1, len(result))]
-                    cps.insert(0, [0, result[0]-1])
-                    cps = torch.as_tensor(cps)
-                    if len(cps) < args.cps_number: 
-                        penalty = False
-                    else:
-                        break
-            # If you want to plot
-            plt.close()
-            plt.plot(preds, alpha=0.5)
-            k = np.zeros(len(pred_array) + 1) 
-            k[result] = 1 
-            plt.plot(k, 'r')
-            plt.xlabel('Frame #')
-            plt.ylabel('Importance score')
-            plt.savefig('imp_score.png')
-            plt.close()
+                if len(cps) < args.cps_number: 
+                    penalty = False
+                else:
+                    break
 
             weights = [sublist[1] - sublist[0] + 1 for sublist in cps]
             weights = torch.as_tensor(weights)
@@ -302,38 +284,37 @@ class Summarize:
             pred_summary = key_labels.tolist()
             pred_summary = torch.as_tensor(pred_summary)
 
-            # Selecting only args.num_cluster amount of keyshots 
-            # keyshot_indices = np.ones(len(selected))
-            # feature_keyshots = np.ones((len(selected), self.features.shape[-1]))
-            # keyshots_imps = np.ones(len(selected))
-            # for selection_count, i in enumerate(selected):
-            #     start_index = cps[i][0]
-            #     end_index = cps[i][1]
-            #     keyframe_index = start_index + np.argmax(preds[start_index:end_index])
-            #     imp = preds[keyframe_index]
-
-            #     keyshot_indices[selection_count] = keyframe_index
-            #     feature_keyshots[selection_count] = self.features[keyframe_index]
-            #     keyshots_imps[selection_count] = imp
-                
-            # _, closest_points_indices = self.get_cluster_features(feature_keyshots)
-            # closest_points_indices  = closest_points_indices[:, 0].astype(int)
-
-            # keyshots = np.ones((args.clusters, 2))
-            # keyshots[:,0] = keyshot_indices[closest_points_indices]
-            # keyshots[:,1] = keyshots_imps[closest_points_indices]
-            
-            keyshots = []
+            keyshot_indices = []
             for i in selected:
                 start_index = cps[i][0]
                 end_index = cps[i][1]
                 keyframe_index = start_index + np.argmax(preds[start_index:end_index])
-                imp = preds[start_index:end_index].max()
-                keyshots.append([keyframe_index, imp])
+                keyshot_indices.append(keyframe_index)
             
+            keyshot_indices = np.asarray(keyshot_indices)
+            kmeans = KMeans(init="k-means++", n_clusters=args.clusters, n_init=10)
+            x = pca_features[keyshot_indices.astype(int)]
+            kmeans.fit(x)
+            
+            cluster_labels = kmeans.labels_  # Get cluster labels for each data point
+            cluster_centers = kmeans.cluster_centers_ # Get cluster centers
+            representative_points = []
+            for i in range(args.clusters):  # 20 clusters
+                indices = np.where(cluster_labels == i)[0] # Get indices of data points in the cluster
+                distances = np.linalg.norm(x[indices] - cluster_centers[i], axis=1)  # Calculate distances of all data points in the cluster to the cluster center
+                closest_point_index = indices[np.argmin(distances)] # Get the index of the point closest to the cluster center
+                representative_points.append(keyshot_indices[closest_point_index]) # Add the closest point to the list of representative points
 
+            representative_points.sort()
+            keyshots = []
+            for i in representative_points:
+                keyframe_index = i
+                imp = preds[i]
+                keyshots.append([keyframe_index, imp])
+
+            
             # Draw first 20 keyshots
-            self.draw_imgs(keyshots, title='img_cps.png')
+            self.draw_imgs(keyshots, title=f'{args.output_folder}/img_cps_new.png')
             
             # Sorting
             keyshots = np.asarray(keyshots)
@@ -344,7 +325,7 @@ class Summarize:
 
     def generate_video(self, key_labels):
             #End of their code
-            print("Creating a video")
+            print("Creating a summary video")
             image_paths = []
             for i, value in enumerate(key_labels):
                 if value == 1:
@@ -358,37 +339,12 @@ class Summarize:
 
             # Define video codec and create VideoWriter object
             fourcc = cv2.VideoWriter_fourcc(*'XVID')
-            video_writer = cv2.VideoWriter('output.avi', fourcc, self.fps, (width, height))
+            video_writer = cv2.VideoWriter(f'{args.output_folder + "/output_new"}.avi', fourcc, self.fps, (width, height))
             for image in images:
                 video_writer.write(image)
             
             video_writer.release()
             print("Video created")
-
-    # def get_cluster_features(self, features):
-    #     pca = PCA(n_components=args.pca_comps, random_state=42)
-    #     pca.fit(features)
-    #     x = pca.transform(features)
-        
-        
-    #     kmeans = KMeans(
-    #         init="random",
-    #         n_clusters=args.clusters,
-    #         #n_init=10,
-    #         #max_iter=300,
-    #         #random_state=42
-    #     )
-
-    #     kmeans.fit(x)
-    #     cluster_centers = kmeans.cluster_centers_
-    #     #labels = kmeans.predict(x)
-    #     distances = euclidean_distances(x, cluster_centers)
-    #     closest_points_indices = distances.argmin(axis=0)
-    #     closest_points_indices.sort()
-    #     #closest_points = features[closest_points_indices]
-    #     closest_points_indices = np.stack((closest_points_indices, np.ones_like(closest_points_indices)*(1/len(closest_points_indices))), axis=-1)
-    #     return x, closest_points_indices
-
 
     def generate_text(self, keyshots):
         base64Frames = []
@@ -440,6 +396,7 @@ class Summarize:
         ]
 
         prompt_messages = [PROMPT_MESSAGE_1, PROMPT_MESSAGE_2]
+        history = ""
         for p in prompt_messages:
             params = {
                 "model": "gpt-4-vision-preview",
@@ -451,28 +408,69 @@ class Summarize:
             }
 
             result = client.chat.completions.create(**params)
-            print(result.choices[0].message.content)
+            history += result.choices[0].message.content
+            #print(result.choices[0].message.content)
+        
+        output_file = f'{args.output_folder}/output_text_new.txt'
+
+        # Open the output text file in write mode
+        with open(output_file, 'w') as file:
+            # Write the text to the file
+            file.write(history)
 
         
 
 if __name__ == '__main__': 
-    video_path = '/scratch2/kat049/tmp/camera0-1024x768-002.mp4'
-    image_path = '/scratch2/kat049/Git/STVT/STVT/STVT/datasets/camera0-1024x768-002/Images'
-    model_path = '/scratch2/kat049/Git/STVT/STVT/STVT/model/TVSum/model_save_name_roundtimes/TVSum_99_0.6389088961807157.pth'
-
-    args = parse_args()
-    args.video_path = video_path
-    args.image_path = image_path
-    args.model_path = model_path
-    args.dataset = image_path.split('/')[-2]
-    args.batch_size = 1
-    args.val_batch_size = 1
-    args.cuda = False #not args.no_cuda and torch.cuda.is_available()
-    args.device = 'cpu'#'cuda' if torch.cuda.is_available() else 'cpu
-    args.cps_number = 19 # TODO need to see how this changes the behaviour
-    args.summary_prop = .15 #TODO if you need to change the summary propotion
-    args.pca_comps = 100
-    args.clusters = 20
+    model_path = '/scratch2/kat049/Git/STVT/STVT/STVT/model/TVSum/model_save_name_roundtimes/TVSum_99_0.6389088961807157.pth' 
     
+    args = parse_args() 
+    args.model_path = model_path 
+    args.batch_size = 1 
+    args.val_batch_size = 1 
+    args.cuda = False #not args.no_cuda and torch.cuda.is_available() 
+    args.device = 'cpu'#'cuda' if torch.cuda.is_available() else 'cpu 
+    args.cps_number = 40 # TODO need to see how this changes the behaviour 
+    args.summary_prop = .15 #TODO if you need to change the summary propotion 
+    args.pca_comps = 100 
+    args.clusters = 20 
 
-    Summarize()
+    # Loop for videos 
+    directory = '/scratch2/kat049/tmp/bear' 
+    # List to store the names of .mp4 files 
+    mp4_files = [] 
+    # Iterate through all files and directories in the specified directory 
+    for filename in os.listdir(directory): 
+        # Check if the file ends with .mp4 
+        if filename.endswith('.mp4'): 
+            # If yes, append the file name to the list 
+            mp4_files.append(os.path.join(directory, filename)) 
+
+    for video_path in mp4_files: 
+        if 'camera0-1024x768-000' in video_path or 'camera0-1024x768-001' in video_path:
+            continue
+        robot = video_path.split('/')[-2] 
+        camera_no = video_path.split('/')[-1].split('.')[0] 
+        image_path = f'/scratch2/kat049/Git/STVT/STVT/STVT/datasets/{robot}_{camera_no}/Images' 
+
+        args.video_path = video_path 
+        args.image_path = image_path 
+        args.robot = robot 
+        args.camera_no =  camera_no 
+        args.dataset = image_path.split('/')[-2] 
+        args.output_folder = f'/scratch2/kat049/Git/STVT/outputs/{args.robot}/{args.camera_no}'
+        
+        Summarize()
+        # if not os.path.exists(args.output_folder):
+        #     print(f"Processing {video_path}")
+        #     # If it doesn't exist, create the directory
+        #     print(f"{args.output_folder} does not exist. Creating one")
+        #     os.makedirs(args.output_folder)
+             
+        # else:
+        #     continue
+
+        
+    
+    #video_path = '/scratch2/kat049/tmp/camera0-1024x768-002.mp4'
+    #image_path = '/scratch2/kat049/Git/STVT/STVT/STVT/datasets/camera0-1024x768-002/Images'
+    
