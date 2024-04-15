@@ -1,4 +1,22 @@
 __pycache__/
 venv*/
-STVT/STVT/datasets/
+STVT/STVT/datasets/*
 STVT/STVT/model/
+hists/*
+images_video11_imps/*
+avgs.png
+frame_imp_TestDataset_11.png
+frame_imp_TestDataset.png
+frame_imp.png
+From h5 file.png
+h5 file vs original dataset.png
+img.png
+output.gif
+target_.png
+target.png
+test.png
+true_summary_arr_20.png
+output.avi
+.env
+STVT/output
+STVT/outputs/*

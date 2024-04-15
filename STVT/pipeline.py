@@ -434,8 +434,46 @@ if __name__ == '__main__':
     args.pca_comps = 100 
     args.clusters = 20 
 
-    # Loop for videos 
+
+    # robot = 'bear'
+    # camera_no = 'all' 
+    # image_path = f'/scratch2/kat049/Git/STVT/STVT/STVT/datasets/{robot}_{camera_no}/Images' 
+    # h5_files = [
+    #         '/scratch2/kat049/Git/STVT/STVT/STVT/datasets/bear_camera0-1024x768-002',
+    #         '/scratch2/kat049/Git/STVT/STVT/STVT/datasets/bear_camera0-1024x768-003',
+    #         '/scratch2/kat049/Git/STVT/STVT/STVT/datasets/bear_camera0-1024x768-004',
+    #         '/scratch2/kat049/Git/STVT/STVT/STVT/datasets/bear_camera0-1024x768-005',
+    #         '/scratch2/kat049/Git/STVT/STVT/STVT/datasets/bear_camera0-1024x768-006',
+    #         '/scratch2/kat049/Git/STVT/STVT/STVT/datasets/bear_camera0-1024x768-007',
+    #         ]
+
+    # # Initialize lists to store features and predictions
+    # all_features = []
+    # all_preds = []
+
+    # # Read data from each .h5 file and append to lists
+    # for filename in h5_files:
+    #     with h5py.File(filename, 'r') as file:
+    #         features = file['features'][:]
+    #         preds = file['preds'][:]
+    #         all_features.append(features)
+    #         all_preds.append(preds)
+
+    # # Concatenate lists along the first axis to create a single dataset
+    # merged_features = np.concatenate(all_features, axis=0)
+    # merged_preds = np.concatenate(all_preds, axis=0)
+
+    # # Create a new HDF5 file to store merged data
+    # output_file = '/scratch2/kat049/Git/STVT/STVT/STVT/datasets/bear_camera0-1024x768-002'
+    # with h5py.File(output_file, 'w') as file:
+    #     # Write merged data to the new HDF5 file
+    #     file.create_dataset('features', data=merged_features)
+    #     file.create_dataset('preds', data=merged_preds)
+    #     # Loop for videos 
+    
     directory = '/scratch2/kat049/tmp/bear' 
+
+
     # List to store the names of .mp4 files 
     mp4_files = [] 
     # Iterate through all files and directories in the specified directory 
@@ -448,9 +486,7 @@ if __name__ == '__main__':
     for video_path in mp4_files: 
         if 'camera0-1024x768-000' in video_path or 'camera0-1024x768-001' in video_path:
             continue
-        robot = video_path.split('/')[-2] 
-        camera_no = video_path.split('/')[-1].split('.')[0] 
-        image_path = f'/scratch2/kat049/Git/STVT/STVT/STVT/datasets/{robot}_{camera_no}/Images' 
+
 
         args.video_path = video_path 
         args.image_path = image_path 

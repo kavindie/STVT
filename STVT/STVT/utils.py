@@ -54,11 +54,11 @@ def cross_entropy_with_label_smoothing(pred, target, eta=0.1):
     return cross_entropy_for_onehot(pred, onehot_target)
 
 def save_model(model, args, best_fscore_k, epoch):
-    if os.path.exists("./STVT/model/"+args.dataset+"/model_" + str(args.roundtimes) + "_roundtimes"):
-        shutil.rmtree("./STVT/model/"+args.dataset+"/model_" + str(args.roundtimes) + "_roundtimes")
-    if not os.path.exists("./STVT/model/"+args.dataset+"/model_" + str(args.roundtimes)+"_roundtimes"):
-        os.mkdir("./STVT/model/"+args.dataset+"/model_" + str(args.roundtimes)+"_roundtimes")
-    path = "./STVT/model/"+args.dataset+"/model_"+str(args.roundtimes)+"_roundtimes/"+str(args.dataset)+"_"+str(epoch)+"_"+str(best_fscore_k)+".pth"
+    if os.path.exists("./STVT/STVT/model/"+args.dataset+"/model_" + str(args.roundtimes) + "_roundtimes"):
+        shutil.rmtree("./STVT/STVT/model/"+args.dataset+"/model_" + str(args.roundtimes) + "_roundtimes")
+    if not os.path.exists("./STVT/STVT/model/"+args.dataset+"/model_" + str(args.roundtimes)+"_roundtimes"):
+        os.mkdir("./STVT/STVT/model/"+args.dataset+"/model_" + str(args.roundtimes)+"_roundtimes")
+    path = "./STVT/STVT/model/"+args.dataset+"/model_"+str(args.roundtimes)+"_roundtimes/"+str(args.dataset)+"_"+str(epoch)+"_"+str(best_fscore_k)+".pth"
     torch.save(model.state_dict(), path)
 def dist_save_model(model, optimizer, epoch, ngpus_per_node, args):
     if not args.multiprocessing_distributed or (

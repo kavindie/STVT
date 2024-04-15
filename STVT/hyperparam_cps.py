@@ -9,6 +9,24 @@ from STVT.knapsack import knapsack
 from STVT.eval import eval_metrics, upsample
 import h5py
 
+# TODO This will not work without the following mods
+"""
+Under eval.py inside the function select_keyshots add the following at the end
+    return eval_arr, pred_summary
+    #TODO get rid of the returning pred_summary
+
+Under train.py in fucntion val
+Instead of  
+eval_res = select_keyshots(predicted_multi_list, video_number_list, image_number_list, target_multi_list, args)
+do
+eval_res, pred_summary = select_keyshots(predicted_multi_list, video_number_list, image_number_list, target_multi_list, args)
+
+Add the following return staement
+return pred_summary, predicted_multi_list, np.asarray(target_multi_list), video_number_list, image_number_list
+and quote all below fscore_k = 0 
+"""
+
+
 
 best_f1_score = 0
 
@@ -17,7 +35,8 @@ def tune_hyperparam(preds, target_multi_list, kernel, min_size, jump, cps_number
         model = "l2"
         pred_array = np.asarray(preds)[...,None]
         algo = rpt.KernelCPD(kernel=kernel, min_size=min_size, jump=jump).fit(pred_array)
-        result = algo.predict(n_bkps=cps_number) # This will always have the last frame by not the first one
+        # result = algo.predict(n_bkps=cps_number) # This will always have the last frame by not the first one
+        result = algo.predict(pen=1)
         print(f'kernel={kernel}, min_size:{min_size}, jump:{jump}, cps_number:{cps_number}')
 
         # If you want to plot
@@ -50,6 +69,7 @@ def tune_hyperparam(preds, target_multi_list, kernel, min_size, jump, cps_number
         #pred_summary = torch.as_tensor(pred_summary)
         _,_, fscore = eval_metrics(pred_summary, target_multi_list)
         return fscore, pred_summary
+
 
 def draw(predicted_multi_list, pred_summary, fscore, i):
      plt.plot(predicted_multi_list)
@@ -136,7 +156,14 @@ def get_sum_of_cost(algo, n_bkps):
     bkps = algo.predict(n_bkps=n_bkps)
     return algo.cost.sum_of_costs(bkps)
 
-def fig_ax(figsize=(15, 5), dpi=150):
+
+def get_sum_of_cost_with_penality(algo, penalty_value):
+    """Return the sum of costs for the change points `bkps`"""
+    bkps = algo.predict(pen=penalty_value)
+    return algo.cost.sum_of_costs(bkps)
+
+
+def fig_ax(figsize=(20, 5), dpi=150):
     """Return a (matplotlib) figure and ax objects with given size."""
     return plt.subplots(figsize=figsize, dpi=dpi)
 
@@ -166,38 +193,69 @@ if __name__ == "__main__":
     draw(predicted_multi_list, pred_summary, fscore, 0)
     print(f"Original method f1 score {fscore}")
     
-    algo = rpt.KernelCPD(kernel="linear").fit(np.asarray(predicted_multi_list))
-    # Choose the number of changes (elbow heuristic)
-    n_bkps_max = 20  # K_max
-    # Start by computing the segmentation with most changes.
-    # After start, all segmentations with 1, 2,..., K_max-1 changes are also available for free.
-    _   = algo.predict(n_bkps_max)
 
-    array_of_n_bkps = np.arange(1, n_bkps_max + 1)
+    # # Method 1
+    # # Using the elbow method to find the cps_number
+    # algo = rpt.KernelCPD(kernel="linear").fit(np.asarray(predicted_multi_list))
+    # # Choose the number of changes (elbow heuristic)
+    # n_bkps_max = 20  # K_max
+    # # Start by computing the segmentation with most changes.
+    # # After start, all segmentations with 1, 2,..., K_max-1 changes are also available for free.
+    # _   = algo.predict(n_bkps_max)
+
+    # array_of_n_bkps = np.arange(1, n_bkps_max + 1)
+
+    # fig, ax = fig_ax((7, 4))
+    # ax.plot(
+    #     array_of_n_bkps,
+    #     [get_sum_of_cost(algo=algo, n_bkps=n_bkps) for n_bkps in array_of_n_bkps],
+    #     "-*",
+    #     alpha=0.5,
+    # )
+    # ax.set_xticks(array_of_n_bkps)
+    # ax.set_xlabel("Number of change points")
+    # ax.set_title("Sum of costs")
+    # ax.grid(axis="x")
+    # ax.set_xlim(0, n_bkps_max + 1)
+    # plt.savefig('img_max_points.png')
+    # plt.close()
 
 
+
+    # # Method 2
+    # # Using penality
+    # algo = rpt.KernelCPD(kernel="linear").fit(np.asarray(predicted_multi_list))
+    # # Choose the number of changes (elbow heuristic)
+    # max_penality = 10  # K_max
+    # # Start by computing the segmentation with most changes.
+    # # After start, all segmentations with 1, 2,..., K_max-1 changes are also available for free.
+    # _   = algo.predict(max_penality)
+
+    # array_of_penalities = np.arange(1, max_penality + 1)
+    # fig, ax = fig_ax((7, 4))
+    # ax.plot(
+    #     array_of_penalities,
+    #     [get_sum_of_cost_with_penality(algo=algo, penalty_value=penality) for penality in array_of_penalities],
+    #     "-*",
+    #     alpha=0.5,
+    # )
+    # ax.set_xticks(array_of_n_bkps)
+    # ax.set_xlabel("Penality value")
+    # ax.set_title("Sum of costs")
+    # ax.grid(axis="x")
+    # ax.set_xlim(0, n_bkps_max + 1)
+    # plt.savefig('img_penality.png')
+    # plt.close()
     
-    fig, ax = fig_ax((7, 4))
-    ax.plot(
-        array_of_n_bkps,
-        [get_sum_of_cost(algo=algo, n_bkps=n_bkps) for n_bkps in array_of_n_bkps],
-        "-*",
-        alpha=0.5,
-    )
-    ax.set_xticks(array_of_n_bkps)
-    ax.set_xlabel("Number of change points")
-    ax.set_title("Sum of costs")
-    ax.grid(axis="x")
-    ax.set_xlim(0, n_bkps_max + 1)
-
-    # for cps_number in range(30, 41):
-    #     args.k = 'linear'
-    #     args.min_size = 2
-    #     args.jump = 1
-    #     args.cps_number = cps_number
-    #     fscore, pred_summary_2 = select_keyshots_my_version(predicted_multi_list, video_number_list, image_number_list, target_multi_list, args)
+    args.k = 'linear'
+    args.min_size = 2
+    args.jump = 1
+    args.cps_number = 10
+    fscore, pred_summary_2 = select_keyshots_my_version(predicted_multi_list, video_number_list, image_number_list, target_multi_list, args)
                     
-    
+    # By looking at it the cost of 10 cps is close to 150
+    # with penality 1 cost is less than 80?
+
     print("todo here")
 
    

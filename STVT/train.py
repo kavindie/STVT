@@ -29,6 +29,7 @@ pd_lr = []
 pd_runtime = []
 pd_loss = []
 pd_F_measure_k = []
+lowest_F_measure_k = -torch.inf
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Image classification')
@@ -137,6 +138,7 @@ def val(model, val_loader, epoch, args):
         epoch = args.epochs - 1
 
     global pd_F_measure_k
+    global lowest_F_measure_k
 
     with tqdm(
         total=len(val_loader), desc='Validate Epoch #{}'.format(epoch + 1)
@@ -151,6 +153,7 @@ def val(model, val_loader, epoch, args):
                 target_list = []
                 if args.cuda:
                     data = data.cuda()
+                    #data = data.to(torch.device("cuda:2"))
                 output = model(data)
                 multi_target = target.permute(1, 0)
                 video_number = video_number
@@ -158,6 +161,7 @@ def val(model, val_loader, epoch, args):
                 multi_output = output
                 for sequence in range(args.sequence):
                     target = multi_target[sequence].cuda()
+                    #target = multi_target[sequence].to(torch.device("cuda:2"))
                     output = multi_output[sequence]
                     predicted_ver2 = []
                     sigmoid = nn.Sigmoid()
@@ -186,9 +190,10 @@ def val(model, val_loader, epoch, args):
                 fscore_k+=i[2]
             fscore_k/= len(list(args.test_dataset.split(",")))
             pd_F_measure_k.append(fscore_k)
-
-
-    save_model(model, args, fscore_k, epoch)
+    
+    if lowest_F_measure_k < fscore_k:
+        save_model(model, args, fscore_k, epoch)
+        lowest_F_measure_k = fscore_k 
     print("test video number:")
     print(args.test_dataset)
     print("F_measure_k:")
@@ -209,6 +214,7 @@ def train(model, train_loader, optimizer, criterion, epoch, args):
     for batch_idx, (data, target, video_number, image_number) in enumerate(train_loader):
         lr_cur = adjust_learning_rate(args, optimizer, epoch, batch_idx, N, type=args.lr_scheduler)
         if args.cuda:
+            #data = data.to(torch.device("cuda:2"))
             data = data.cuda()
         optimizer.zero_grad()
         output = model(data)
@@ -217,6 +223,7 @@ def train(model, train_loader, optimizer, criterion, epoch, args):
         multi_loss = 0
         for sequence in range(args.sequence):
             target = multi_target[sequence].cuda()
+            #target = multi_target[sequence].to(torch.device("cuda:2"))
             output = multi_output[sequence]
             loss = criterion(output, target)
             multi_loss+=loss
@@ -277,10 +284,11 @@ def train_net(args):
     cudnn.benchmark = True
 
     if args.cuda:
+        #model.to(torch.device("cuda:2"))
         model.cuda()
 
 
-    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([A, B])).to(device)
 
 
@@ -317,11 +325,12 @@ def train_net(args):
                  }
 
         dataframe = pd.DataFrame(ddict)
-        csv_path = "./STVT/work_dirs/Record/csv/"+args.dataset+"/Record_" + str(args.roundtimes) + ".csv"
+        csv_path = "./STVT/STVT/work_dirs/Record/csv/"+args.dataset+"/Record_" + str(args.roundtimes) + ".csv"
         dataframe.to_csv(csv_path, index=False, sep=',')
 
         epoch += 1
 
 if __name__ == "__main__":
+    #torch.cuda.set_device(2)
     args = parse_args()
     train_net(args)

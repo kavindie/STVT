@@ -35,6 +35,8 @@ def TVSum(args, distributed=False):
                         features = video['feature'][:]
                         gtsummary = video['label'][:]
 
+                        # print(f'The video is number {video_number} with {features.shape[0]} frames')
+
                         downsample_image_number = len(features)
                         gonumber = int(downsample_image_number / patch_number)
                         for ds_image_index in range(gonumber):
@@ -71,7 +73,7 @@ def TVSum(args, distributed=False):
         all_arr.append(i+1)
     test_arr = list(map(int, args.test_dataset.split(',')))
     train_arr = [i for i in all_arr if i not in test_arr]
-    file_dir = './STVT/datasets/datasets/'+str(args.dataset)+".h5"
+    file_dir = './STVT/STVT/datasets/datasets/'+str(args.dataset)+".h5"
     video_amount = train_arr
     train_data = TVSumDataset(file_dir=file_dir, video_amount=video_amount, F_In_target=True)
     train_loader = DataLoader(dataset=train_data, batch_size=args.batch_size, shuffle=True, drop_last=True)
