@@ -1,0 +1,7 @@
+{
+    "git.ignoreLimitWarning": true,
+    "files.watcherExclude": {
+        "**/datasets/*.h5": true,
+        "**/NewDataset/Images/**.jpg": true
+    }
+}
